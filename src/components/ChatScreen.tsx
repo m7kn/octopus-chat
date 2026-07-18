@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMcpStore } from '../store/mcpStore';
 import { systemInfoTool, systemInfoToolHandler } from '../plugins/systemInfoTool';
 import { listSandboxFilesTool, listSandboxFilesHandler, readSandboxFileTool, readSandboxFileHandler } from '../plugins/fileSystemTool';
+import MessageContentRenderer from './MessageContentRenderer';
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
@@ -100,9 +101,7 @@ export default function ChatScreen() {
             <Text style={styles.thoughtText}>{message.thought}</Text>
           </View>
         )}
-        <Text style={[styles.messageText, isUser ? styles.userText : styles.assistantText]}>
-          {message.content}
-        </Text>
+        <MessageContentRenderer content={message.content} isUser={isUser} />
       </View>
     );
   }, [thoughtExpanded, toggleThought]);

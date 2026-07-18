@@ -1,99 +1,70 @@
 const { WebSocketServer } = require("ws");
 
 const wss = new WebSocketServer({ port: 8080 });
-console.log("🤖 MCP Mock Agent Server fut a ws://localhost:8080 porton...");
+console.log("🤖 MCP Mock Agent Server (Fix Id Check) fut...");
 
 wss.on("connection", (ws) => {
   console.log("📱 Kliens csatlakozott!");
 
-  // 1. Lekérjük a kliens által regisztrált eszközöket (tools/list)
   ws.send(
     JSON.stringify({
       jsonrpc: "2.0",
       method: "tools/list",
-      id: "check_tools_phase4",
+      id: "list_phase5",
     }),
   );
 
   ws.on("message", async (messageData) => {
     try {
       const data = JSON.parse(messageData);
-      console.log("📥 Érkezett:", JSON.stringify(data, null, 2));
 
-      // Amikor a kliens válaszol a tools/list-re
-      if (data.id === "check_tools_phase4" && data.result) {
-        console.log(
-          "🛠️ Elérhető eszközök a kliensen:",
-          data.result.tools.map((t) => t.name),
-        );
-
-        // Teszt 1: Hívjuk meg a list_sandbox_files eszközt 2 másodperc múlva
-        setTimeout(() => {
-          console.log(
-            "⚡ Biztonságos eszközhívás indítása: list_sandbox_files...",
-          );
-          ws.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              method: "tools/call",
-              id: "call_list_files_test",
-              params: { name: "list_sandbox_files", arguments: {} },
-            }),
-          );
-        }, 2000);
-      }
-
-      // Amikor megérkezik a list_sandbox_files eredménye
-      if (data.id === "call_list_files_test") {
-        if (data.error) {
-          console.log(
-            "❌ Elutasítva vagy Hiba (list_sandbox_files):",
-            data.error.message,
-          );
-        } else {
-          console.log(
-            "✅ Sikeres fájllistázás! Eredmény:",
-            data.result.content[0].text,
-          );
-        }
-
-        // Teszt 2: Próbáljunk meg beolvasni egy konkrét fájlt (HITL teszt)
-        setTimeout(() => {
-          console.log(
-            "⚡ Kritikus eszközhívás indítása: read_sandbox_file (Keresett: secret_log.txt)...",
-          );
-          ws.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              method: "tools/call",
-              id: "call_read_file_test",
-              params: {
-                name: "read_sandbox_file",
-                arguments: { fileName: "secret_log.txt" },
-              },
-            }),
-          );
-        }, 2000);
-      }
-
-      // Amikor megérkezik a read_sandbox_file eredménye
-      if (data.id === "call_read_file_test") {
-        if (data.error) {
-          console.log(
-            "❌ Elutasítva vagy Hiba (read_sandbox_file):",
-            data.error.message,
-          );
-        } else {
-          console.log(
-            "✅ Sikeres fájlolvasás! Tartalom:",
-            data.result.content[0].text,
-          );
-        }
+      if (data.method === "chat/message") {
+        console.log(`📥 Felhasználó üzenete: "${data.params.text}"`);
+        await streamComplexResponse(ws);
       }
     } catch (err) {
-      console.error("Hiba az üzenet parszolásakor:", err);
+      console.error("Hiba:", err);
     }
   });
 
   ws.on("close", () => console.log("❌ Kliens lecsatlakozott."));
 });
+
+async function streamComplexResponse(ws) {
+  const thought =
+    "A felhasználó tesztelni akarja a megjelenítést. Küldök neki formázott szöveget, egy kódblokkot, és a SystemStatusCard widgetet.";
+
+  const fullPayload = `Itt van a kért technikai részlet. Az MCP kliens indításához a következő TypeScript kódot használhatod:
+
+\`\`\`typescript
+import { useMcpStore } from './store/mcpStore';
+
+useMcpStore.getState().connect('ws://localhost:8080/mcp');
+\`\`\`
+
+A csatlakozás után az ágens az alábbi élő szervermetrikákat küldte vissza neked:
+
+{"type": "ui-widget", "name": "SystemStatusCard", "data": {"cpu": 42, "memory": 78, "status": "optimal", "uptime": "2h 45m"}}`;
+
+  const chunkSize = 20;
+
+  for (let i = 0; i < fullPayload.length; i += chunkSize) {
+    const chunk = fullPayload.substring(i, i + chunkSize);
+    const isDone = i + chunkSize >= fullPayload.length;
+
+    ws.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: null, // JAVÍTÁS: Így már átmegy a transport.ts isJsonRpcMessage ellenőrzésén!
+        method: "chat/message",
+        params: {
+          thought: thought,
+          text: chunk,
+          done: isDone,
+        },
+      }),
+    );
+
+    await new Promise((r) => setTimeout(r, 40));
+  }
+}
