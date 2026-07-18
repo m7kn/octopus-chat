@@ -14,11 +14,14 @@ export interface McpStore {
   activeTools: ActiveTool[];
   messages: ChatMessage[];
   error: McpError | null;
+  pendingAuthorization: { toolName: string; params: unknown; resolve: (approved: boolean) => void } | null;
   connect: (url: string) => void;
   disconnect: () => void;
   sendUserPrompt: (text: string) => void;
   registerLocalTool: (tool: McpTool, handler: McpToolHandler) => void;
   unregisterLocalTool: (name: string) => void;
+  approveTool: () => void;
+  denyTool: () => void;
   clearError: () => void;
 }
 
@@ -67,6 +70,17 @@ export const useMcpStore = create<McpStore>((set, get) => {
         return { messages };
       });
     },
+    validateToolPermission: async (toolName: string, params: unknown) => {
+      return new Promise<boolean>((resolve) => {
+        set({
+          pendingAuthorization: {
+            toolName,
+            params,
+            resolve,
+          },
+        });
+      });
+    },
   });
 
   return {
@@ -75,6 +89,7 @@ export const useMcpStore = create<McpStore>((set, get) => {
     activeTools: [],
     messages: [],
     error: null,
+    pendingAuthorization: null,
     connect: (url: string) => {
       client.connect(url);
     },
@@ -100,6 +115,20 @@ export const useMcpStore = create<McpStore>((set, get) => {
     },
     unregisterLocalTool: (name: string) => {
       client.unregisterLocalTool(name);
+    },
+    approveTool: () => {
+      const auth = get().pendingAuthorization;
+      if (auth) {
+        auth.resolve(true);
+        set({ pendingAuthorization: null });
+      }
+    },
+    denyTool: () => {
+      const auth = get().pendingAuthorization;
+      if (auth) {
+        auth.resolve(false);
+        set({ pendingAuthorization: null });
+      }
     },
     clearError: () => {
       set({ error: null });

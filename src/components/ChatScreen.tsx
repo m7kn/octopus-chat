@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -23,8 +24,11 @@ export default function ChatScreen() {
   const messages = useMcpStore((state: { messages: { id: string; role: 'user' | 'assistant'; content: string; thought?: string }[] }) => state.messages);
   const isConnected = useMcpStore((state: { isConnected: boolean }) => state.isConnected);
   const activeTools = useMcpStore((state: { activeTools: { name: string; params: unknown; startedAt: number }[] }) => state.activeTools);
+  const pendingAuthorization = useMcpStore((state: { pendingAuthorization: { toolName: string; params: unknown; resolve: (approved: boolean) => void } | null }) => state.pendingAuthorization);
   const sendUserPrompt = useMcpStore((state: { sendUserPrompt: (text: string) => void }) => state.sendUserPrompt);
   const registerLocalTool = useMcpStore((state: { registerLocalTool: (tool: import('../core/mcp/types').McpTool, handler: import('../core/mcp/transport').McpToolHandler) => void }) => state.registerLocalTool);
+  const approveTool = useMcpStore((state: { approveTool: () => void }) => state.approveTool);
+  const denyTool = useMcpStore((state: { denyTool: () => void }) => state.denyTool);
   const client = useMcpStore((state: { client: import('../core/mcp/transport').McpWebSocketClient | null }) => state.client);
 
   const connect = useMcpStore((state) => state.connect);
@@ -137,6 +141,33 @@ export default function ChatScreen() {
         )}
         {messages.map(renderMessage)}
       </ScrollView>
+
+      <Modal visible={!!pendingAuthorization} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Tool Execution Request</Text>
+            <Text style={styles.modalText}>
+              Agent wants to run tool: <Text style={styles.modalToolName}>{pendingAuthorization?.toolName}</Text>
+            </Text>
+            {pendingAuthorization && pendingAuthorization.params != null && (
+              <View style={styles.paramsContainer}>
+                <Text style={styles.paramsLabel}>Arguments:</Text>
+                <Text style={styles.paramsText}>
+                  {JSON.stringify(pendingAuthorization.params, null, 2)}
+                </Text>
+              </View>
+            )}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={[styles.modalButton, styles.denyButton]} onPress={denyTool}>
+                <Text style={styles.denyButtonText}>Deny</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.allowButton]} onPress={approveTool}>
+                <Text style={styles.allowButtonText}>Allow</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <View style={[styles.inputContainer, { paddingBottom: insets.bottom + (Platform.OS === 'ios' ? 8 : 12) }]}>
         <TextInput
@@ -305,6 +336,88 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxWidth: 360,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000000',
+    marginBottom: 12,
+  },
+  modalText: {
+    fontSize: 15,
+    color: '#3C3C43',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  modalToolName: {
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  paramsContainer: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+  },
+  paramsLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  paramsText: {
+    fontSize: 13,
+    color: '#3C3C43',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    lineHeight: 18,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  denyButton: {
+    backgroundColor: '#FF3B30',
+  },
+  denyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  allowButton: {
+    backgroundColor: '#34C759',
+  },
+  allowButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '600',
   },
 });

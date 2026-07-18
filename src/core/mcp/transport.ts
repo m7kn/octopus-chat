@@ -15,6 +15,7 @@ export interface McpWebSocketClientOptions {
   onToolStart?: (toolName: string, params: unknown) => void;
   onToolEnd?: (toolName: string, result: unknown, error?: Error) => void;
   onMessageReceived?: (text: string, isDone: boolean, thought?: string) => void;
+  validateToolPermission?: (toolName: string, params: unknown) => Promise<boolean>;
 }
 
 export class McpWebSocketClient {
@@ -27,6 +28,7 @@ export class McpWebSocketClient {
   private readonly onToolStart?: (toolName: string, params: unknown) => void;
   private readonly onToolEnd?: (toolName: string, result: unknown, error?: Error) => void;
   private readonly onMessageReceived?: (text: string, isDone: boolean, thought?: string) => void;
+  private readonly validateToolPermission?: (toolName: string, params: unknown) => Promise<boolean>;
   private pendingRequests: Map<
     string | number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
@@ -39,6 +41,7 @@ export class McpWebSocketClient {
     this.onToolStart = options.onToolStart;
     this.onToolEnd = options.onToolEnd;
     this.onMessageReceived = options.onMessageReceived;
+    this.validateToolPermission = options.validateToolPermission;
   }
 
   getStatus(): ConnectionStatus {
@@ -194,6 +197,12 @@ export class McpWebSocketClient {
 
           if (!tool || !handler) {
             await this.sendError(request.id, MCP_ERROR_CODES.RESOURCE_NOT_FOUND, `Tool not found: ${toolName}`);
+            return;
+          }
+
+          const approved = this.validateToolPermission ? await this.validateToolPermission(toolName, params.arguments ?? {}) : true;
+          if (!approved) {
+            await this.sendError(request.id, MCP_ERROR_CODES.INVALID_REQUEST, 'Execution denied by user');
             return;
           }
 
