@@ -1,0 +1,1 @@
+Strictly use TypeScript. Prioritize functional React components with hooks. Use Zustand for state management and avoid class components for UI. Maintain separation of concerns between the MCP transport layer and the UI.
