@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMcpStore } from '../store/mcpStore';
 import { systemInfoTool, systemInfoToolHandler } from '../plugins/systemInfoTool';
+import { listSandboxFilesTool, listSandboxFilesHandler, readSandboxFileTool, readSandboxFileHandler } from '../plugins/fileSystemTool';
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
@@ -35,6 +36,8 @@ export default function ChatScreen() {
 
   useEffect(() => {
     registerLocalTool(systemInfoTool, systemInfoToolHandler);
+    registerLocalTool(listSandboxFilesTool, listSandboxFilesHandler);
+    registerLocalTool(readSandboxFileTool, readSandboxFileHandler);
   }, [registerLocalTool]);
 
   useEffect(() => {

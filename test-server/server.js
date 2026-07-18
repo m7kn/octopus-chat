@@ -6,101 +6,94 @@ console.log("🤖 MCP Mock Agent Server fut a ws://localhost:8080 porton...");
 wss.on("connection", (ws) => {
   console.log("📱 Kliens csatlakozott!");
 
-  // 1. Azonnal kérjük le a kliens által támogatott eszközöket (tools/list)
-  const listRequest = {
-    jsonrpc: "2.0",
-    method: "tools/list",
-    id: "init_list_1",
-  };
-  ws.send(JSON.stringify(listRequest));
+  // 1. Lekérjük a kliens által regisztrált eszközöket (tools/list)
+  ws.send(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/list",
+      id: "check_tools_phase4",
+    }),
+  );
 
-  // Üzenetek fogadása a klienstől
   ws.on("message", async (messageData) => {
     try {
       const data = JSON.parse(messageData);
-      console.log("📥 Érkezett üzenet:", JSON.stringify(data, null, 2));
+      console.log("📥 Érkezett:", JSON.stringify(data, null, 2));
 
-      // Kezeljük, ha a kliens válaszolt a tools/list kérésre
-      if (data.id === "init_list_1" && data.result) {
+      // Amikor a kliens válaszol a tools/list-re
+      if (data.id === "check_tools_phase4" && data.result) {
         console.log(
-          "🛠️ A kliens az alábbi eszközöket exponálta:",
-          data.result.tools,
+          "🛠️ Elérhető eszközök a kliensen:",
+          data.result.tools.map((t) => t.name),
         );
 
-        // Teszteljük a get_system_info meghívását 2 másodperc múlva!
+        // Teszt 1: Hívjuk meg a list_sandbox_files eszközt 2 másodperc múlva
         setTimeout(() => {
-          console.log("⚡ Eszköz meghívása: get_system_info...");
+          console.log(
+            "⚡ Biztonságos eszközhívás indítása: list_sandbox_files...",
+          );
           ws.send(
             JSON.stringify({
               jsonrpc: "2.0",
               method: "tools/call",
-              id: "call_sys_info_test",
-              params: { name: "get_system_info", arguments: {} },
+              id: "call_list_files_test",
+              params: { name: "list_sandbox_files", arguments: {} },
             }),
           );
         }, 2000);
       }
 
-      // Kezeljük, ha a kliens visszaküldte a tool futásának eredményét
-      if (data.id === "call_sys_info_test") {
-        console.log(
-          "✅ Eszköz futásának eredménye megérkezett a klienstől:",
-          data.result.content[0].text,
-        );
+      // Amikor megérkezik a list_sandbox_files eredménye
+      if (data.id === "call_list_files_test") {
+        if (data.error) {
+          console.log(
+            "❌ Elutasítva vagy Hiba (list_sandbox_files):",
+            data.error.message,
+          );
+        } else {
+          console.log(
+            "✅ Sikeres fájllistázás! Eredmény:",
+            data.result.content[0].text,
+          );
+        }
+
+        // Teszt 2: Próbáljunk meg beolvasni egy konkrét fájlt (HITL teszt)
+        setTimeout(() => {
+          console.log(
+            "⚡ Kritikus eszközhívás indítása: read_sandbox_file (Keresett: secret_log.txt)...",
+          );
+          ws.send(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              method: "tools/call",
+              id: "call_read_file_test",
+              params: {
+                name: "read_sandbox_file",
+                arguments: { fileName: "secret_log.txt" },
+              },
+            }),
+          );
+        }, 2000);
       }
 
-      // Kezeljük a felhasználó chat üzenetét
-      if (data.method === "chat/message") {
-        const userText = data.params.text;
-        console.log(`💬 Felhasználó üzenete: "${userText}"`);
-
-        // Szimuláljuk az ágens válaszadását: először gondolkodik, majd streamel
-        await simulateAgentResponse(ws, userText);
+      // Amikor megérkezik a read_sandbox_file eredménye
+      if (data.id === "call_read_file_test") {
+        if (data.error) {
+          console.log(
+            "❌ Elutasítva vagy Hiba (read_sandbox_file):",
+            data.error.message,
+          );
+        } else {
+          console.log(
+            "✅ Sikeres fájlolvasás! Tartalom:",
+            data.result.content[0].text,
+          );
+        }
       }
     } catch (err) {
-      console.error("Hiba az üzenet feldolgozásakor:", err);
+      console.error("Hiba az üzenet parszolásakor:", err);
     }
   });
 
   ws.on("close", () => console.log("❌ Kliens lecsatlakozott."));
 });
-
-// Ágens válasz szimuláció (Gondolkodás + Szöveg streaming)
-async function simulateAgentResponse(ws, userText) {
-  // 1. lépés: Küldünk egy gondolkodási fázist (Thought)
-  ws.send(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      method: "chat/stream",
-      params: {
-        thought: `A felhasználó ezt kérdezte: "${userText}". Lekértem a rendszerinfókat, minden működik. Válaszolok neki kedvesen.`,
-        text: "",
-        isDone: false,
-      },
-    }),
-  );
-
-  // Kis szünet a gondolkodás után
-  await new Promise((r) => setTimeout(r, 1000));
-
-  const fullResponse = `Megkaptam az üzeneted: "${userText}". A WebSocket alapú MCP kapcsolatunk tökéletesen működik, és sikeresen lefutott a háttérben a get_system_info eszköz is!`;
-  const words = fullResponse.split(" ");
-
-  // Szavanként streameljük a szöveget
-  let currentText = "";
-  for (let i = 0; i < words.length; i++) {
-    currentText += (i === 0 ? "" : " ") + words[i];
-    ws.send(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        method: "chat/stream",
-        params: {
-          thought: `A felhasználó ezt kérdezte: "${userText}". Lekértem a rendszerinfókat, minden működik. Válaszolok neki kedvesen.`, // megtartjuk a gondolatot
-          text: currentText,
-          isDone: i === words.length - 1,
-        },
-      }),
-    );
-    await new Promise((r) => setTimeout(r, 150)); // Késleltetés a stream hatáshoz
-  }
-}
