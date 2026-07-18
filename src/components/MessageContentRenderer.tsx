@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import Clipboard from 'expo-clipboard';
+import * as Clipboard from 'expo-clipboard';
 import { widgetRegistry } from '../plugins/widgetRegistry';
 
 export interface WidgetPayload {
@@ -42,16 +42,19 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language }) => {
 
 interface WidgetRendererProps {
   payload: WidgetPayload;
+  textColor: string;
 }
 
-const WidgetRenderer: React.FC<WidgetRendererProps> = ({ payload }) => {
+const WidgetRenderer: React.FC<WidgetRendererProps> = ({ payload, textColor }) => {
   const Component = widgetRegistry[payload.name];
 
   if (!Component) {
     return (
       <View style={styles.unknownWidget}>
-        <Text style={styles.unknownWidgetText}>Unknown widget: {payload.name}</Text>
-        <Text style={styles.unknownWidgetData}>{JSON.stringify(payload.data, null, 2)}</Text>
+        <Text style={[styles.unknownWidgetText, { color: '#FF3B30' }]}>Unknown widget: {payload.name}</Text>
+        <Text style={[styles.unknownWidgetData, { color: textColor }]}>
+          {JSON.stringify(payload.data, null, 2)}
+        </Text>
       </View>
     );
   }
@@ -75,7 +78,61 @@ const parseWidget = (text: string): WidgetPayload | null => {
   return null;
 };
 
-const parseContent = (content: string): React.ReactNode[] => {
+const findWidgetInText = (text: string): { widget: WidgetPayload | null; before: string; after: string } => {
+  const widgetMarker = '"type": "ui-widget"';
+  const markerIndex = text.indexOf(widgetMarker);
+
+  if (markerIndex === -1) {
+    return { widget: null, before: text, after: '' };
+  }
+
+  let start = markerIndex;
+  while (start >= 0 && text[start] !== '{') {
+    start--;
+  }
+
+  if (start < 0) {
+    return { widget: null, before: text, after: '' };
+  }
+
+  let braceCount = 0;
+  let end = start;
+  while (end < text.length) {
+    if (text[end] === '{') braceCount++;
+    if (text[end] === '}') braceCount--;
+    if (braceCount === 0) break;
+    end++;
+  }
+
+  if (braceCount !== 0 || end >= text.length) {
+    return { widget: null, before: text, after: '' };
+  }
+
+  const jsonStr = text.slice(start, end + 1);
+  const before = text.slice(0, start);
+  const after = text.slice(end + 1);
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && typeof parsed === 'object' && parsed.type === 'ui-widget' && typeof parsed.name === 'string') {
+      return {
+        widget: {
+          type: 'ui-widget',
+          name: parsed.name,
+          data: typeof parsed.data === 'object' && parsed.data !== null ? parsed.data : {},
+        },
+        before,
+        after,
+      };
+    }
+  } catch {
+    // invalid JSON, fall back to plain text
+  }
+
+  return { widget: null, before: text, after: '' };
+};
+
+const parseContent = (content: string, textColor: string): React.ReactNode[] => {
   const parts: React.ReactNode[] = [];
   const codeBlockRegex = /```([\w\s]*)\n?([\s\S]*?)```/g;
   let lastIndex = 0;
@@ -85,7 +142,7 @@ const parseContent = (content: string): React.ReactNode[] => {
   while ((match = codeBlockRegex.exec(content)) !== null) {
     const beforeText = content.slice(lastIndex, match.index);
     if (beforeText.trim()) {
-      parts.push(<Text key={`text-${key++}`} style={styles.plainText}>{beforeText}</Text>);
+      parts.push(<Text key={`text-${key++}`} style={[styles.plainText, { color: textColor }]}>{beforeText}</Text>);
     }
 
     const language = match[1].trim() || undefined;
@@ -97,7 +154,7 @@ const parseContent = (content: string): React.ReactNode[] => {
 
   const afterText = content.slice(lastIndex);
   if (afterText.trim()) {
-    parts.push(<Text key={`text-${key++}`} style={styles.plainText}>{afterText}</Text>);
+    parts.push(<Text key={`text-${key++}`} style={[styles.plainText, { color: textColor }]}>{afterText}</Text>);
   }
 
   return parts;
@@ -110,13 +167,37 @@ export interface MessageContentRendererProps {
 
 const MessageContentRenderer: React.FC<MessageContentRendererProps> = ({ content, isUser = false }) => {
   const trimmed = content.trim();
-  const widget = parseWidget(trimmed);
+  const textColor = isUser ? '#FFFFFF' : '#000000';
 
-  if (widget) {
-    return <WidgetRenderer payload={widget} />;
+  const wholeWidget = parseWidget(trimmed);
+  if (wholeWidget) {
+    return <WidgetRenderer payload={wholeWidget} textColor={textColor} />;
   }
 
-  const parts = parseContent(content);
+  const { widget, before, after } = findWidgetInText(content);
+
+  if (widget) {
+    const beforeParts = parseContent(before, textColor);
+    const afterParts = after.trim() ? parseContent(after, textColor) : [];
+
+    return (
+      <View style={styles.container}>
+        {beforeParts.map((part, i) => (
+          <View key={`before-${i}`} style={styles.partContainer}>
+            {part}
+          </View>
+        ))}
+        <WidgetRenderer payload={widget} textColor={textColor} />
+        {afterParts.map((part, i) => (
+          <View key={`after-${i}`} style={styles.partContainer}>
+            {part}
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  const parts = parseContent(content, textColor);
 
   if (parts.length === 0) {
     return null;
@@ -143,7 +224,6 @@ const styles = StyleSheet.create({
   plainText: {
     fontSize: 16,
     lineHeight: 22,
-    color: '#000000',
   },
   codeContainer: {
     backgroundColor: '#1E1E1E',
@@ -195,12 +275,10 @@ const styles = StyleSheet.create({
   unknownWidgetText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FF3B30',
     marginBottom: 8,
   },
   unknownWidgetData: {
     fontSize: 12,
-    color: '#3C3C43',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
 });

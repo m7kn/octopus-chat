@@ -1,53 +1,76 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-export interface WidgetProps {
-  data: Record<string, unknown>;
+interface SystemStatusCardProps {
+  data: {
+    cpu?: number;
+    memory?: number;
+    status?: string;
+    uptime?: string;
+  };
 }
 
-export const SystemStatusCard: React.FC<WidgetProps> = ({ data }) => {
-  const os = typeof data.os === 'string' ? data.os : 'Unknown';
-  const version = typeof data.version === 'string' || typeof data.version === 'number' ? String(data.version) : 'Unknown';
-  const isWeb = data.isWeb === true;
-  const timestamp = typeof data.timestamp === 'number' ? new Date(data.timestamp).toLocaleString() : 'N/A';
-
+const SystemStatusCard: React.FC<SystemStatusCardProps> = ({ data }) => {
   return (
     <View style={styles.card}>
       <Text style={styles.title}>System Status</Text>
+      
       <View style={styles.row}>
-        <Text style={styles.label}>OS:</Text>
-        <Text style={styles.value}>{os}</Text>
+        <Text style={styles.label}>CPU Usage:</Text>
+        <Text style={styles.value}>
+          {data.cpu !== undefined ? `${data.cpu}%` : 'N/A'}
+        </Text>
       </View>
+      
       <View style={styles.row}>
-        <Text style={styles.label}>Version:</Text>
-        <Text style={styles.value}>{version}</Text>
+        <Text style={styles.label}>Memory Usage:</Text>
+        <Text style={styles.value}>
+          {data.memory !== undefined ? `${data.memory}%` : 'N/A'}
+        </Text>
       </View>
+      
       <View style={styles.row}>
-        <Text style={styles.label}>Platform:</Text>
-        <Text style={styles.value}>{isWeb ? 'Web' : 'Native'}</Text>
+        <Text style={styles.label}>Status:</Text>
+        <Text style={[
+          styles.value, 
+          data.status === 'optimal' ? styles.optimalText : null
+        ]}>
+          {data.status ? data.status.toUpperCase() : 'UNKNOWN'}
+        </Text>
       </View>
+      
       <View style={styles.row}>
-        <Text style={styles.label}>Timestamp:</Text>
-        <Text style={styles.value}>{timestamp}</Text>
+        <Text style={styles.label}>Uptime:</Text>
+        <Text style={styles.value}>{data.uptime || 'N/A'}</Text>
       </View>
     </View>
   );
 };
 
+// Központi registry exportálása a MessageContentRenderer számára
+export const widgetRegistry: Record<string, React.FC<any>> = {
+  SystemStatusCard: SystemStatusCard,
+};
+
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
-    marginVertical: 8,
     borderLeftWidth: 4,
     borderLeftColor: '#007AFF',
+    marginVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   title: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#000000',
     marginBottom: 12,
+    color: '#000000',
   },
   row: {
     flexDirection: 'row',
@@ -56,18 +79,14 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
     color: '#8E8E93',
   },
   value: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#000000',
   },
+  optimalText: {
+    color: '#34C759',
+  },
 });
-
-export type WidgetComponent = React.FC<WidgetProps>;
-
-export const widgetRegistry: Record<string, WidgetComponent> = {
-  SystemStatusCard,
-};
