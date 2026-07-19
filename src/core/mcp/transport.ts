@@ -28,7 +28,7 @@ export class McpWebSocketClient {
   private readonly onToolStart?: (toolName: string, params: unknown) => void;
   private readonly onToolEnd?: (toolName: string, result: unknown, error?: Error) => void;
   private readonly onMessageReceived?: (text: string, isDone: boolean, thought?: string) => void;
-  private readonly validateToolPermission?: (toolName: string, params: unknown) => Promise<boolean>;
+  public validateToolPermission?: (toolName: string, params: unknown) => Promise<boolean>;
   private pendingRequests: Map<
     string | number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
@@ -41,7 +41,6 @@ export class McpWebSocketClient {
     this.onToolStart = options.onToolStart;
     this.onToolEnd = options.onToolEnd;
     this.onMessageReceived = options.onMessageReceived;
-    this.validateToolPermission = options.validateToolPermission;
   }
 
   getStatus(): ConnectionStatus {

@@ -32,8 +32,13 @@ export default function ChatScreen() {
   const approveTool = useMcpStore((state: { approveTool: () => void }) => state.approveTool);
   const denyTool = useMcpStore((state: { denyTool: () => void }) => state.denyTool);
   const client = useMcpStore((state: { client: import('../core/mcp/transport').McpWebSocketClient | null }) => state.client);
+  const init = useMcpStore((state) => state.init);
 
   const connect = useMcpStore((state) => state.connect);
+
+  useEffect(() => {
+    init();
+  }, [init]);
 
   useEffect(() => {
     registerLocalTool(systemInfoTool, systemInfoToolHandler);

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { widgetRegistry } from '../plugins/widgetRegistry';
@@ -16,12 +16,30 @@ interface CodeBlockProps {
 
 const CodeBlock: React.FC<CodeBlockProps> = ({ code, language }) => {
   const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = useCallback(async () => {
-    await Clipboard.setStringAsync(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await Clipboard.setStringAsync(code);
+      setCopied(true);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
   }, [code]);
+
+  if (!code) {
+    return null;
+  }
 
   return (
     <View style={styles.codeContainer}>
@@ -79,38 +97,39 @@ const parseWidget = (text: string): WidgetPayload | null => {
 };
 
 const findWidgetInText = (text: string): { widget: WidgetPayload | null; before: string; after: string } => {
+  const safeText = text ?? '';
   const widgetMarker = '"type": "ui-widget"';
-  const markerIndex = text.indexOf(widgetMarker);
+  const markerIndex = safeText.indexOf(widgetMarker);
 
   if (markerIndex === -1) {
-    return { widget: null, before: text, after: '' };
+    return { widget: null, before: safeText, after: '' };
   }
 
   let start = markerIndex;
-  while (start >= 0 && text[start] !== '{') {
+  while (start >= 0 && safeText[start] !== '{') {
     start--;
   }
 
   if (start < 0) {
-    return { widget: null, before: text, after: '' };
+    return { widget: null, before: safeText, after: '' };
   }
 
   let braceCount = 0;
   let end = start;
-  while (end < text.length) {
-    if (text[end] === '{') braceCount++;
-    if (text[end] === '}') braceCount--;
+  while (end < safeText.length) {
+    if (safeText[end] === '{') braceCount++;
+    if (safeText[end] === '}') braceCount--;
     if (braceCount === 0) break;
     end++;
   }
 
-  if (braceCount !== 0 || end >= text.length) {
-    return { widget: null, before: text, after: '' };
+  if (braceCount !== 0 || end >= safeText.length) {
+    return { widget: null, before: safeText, after: '' };
   }
 
-  const jsonStr = text.slice(start, end + 1);
-  const before = text.slice(0, start);
-  const after = text.slice(end + 1);
+  const jsonStr = safeText.slice(start, end + 1);
+  const before = safeText.slice(0, start);
+  const after = safeText.slice(end + 1);
 
   try {
     const parsed = JSON.parse(jsonStr);
@@ -129,10 +148,14 @@ const findWidgetInText = (text: string): { widget: WidgetPayload | null; before:
     // invalid JSON, fall back to plain text
   }
 
-  return { widget: null, before: text, after: '' };
+  return { widget: null, before: safeText, after: '' };
 };
 
 const parseContent = (content: string, textColor: string): React.ReactNode[] => {
+  const safeContent = content ?? '';
+  if (!safeContent.trim()) {
+    return [];
+  }
   const parts: React.ReactNode[] = [];
   const codeBlockRegex = /```([\w\s]*)\n?([\s\S]*?)```/g;
   let lastIndex = 0;
@@ -161,12 +184,13 @@ const parseContent = (content: string, textColor: string): React.ReactNode[] => 
 };
 
 export interface MessageContentRendererProps {
-  content: string;
+  content?: string;
   isUser?: boolean;
 }
 
 const MessageContentRenderer: React.FC<MessageContentRendererProps> = ({ content, isUser = false }) => {
-  const trimmed = content.trim();
+  const safeContent = content ?? '';
+  const trimmed = safeContent.trim();
   const textColor = isUser ? '#FFFFFF' : '#000000';
 
   const wholeWidget = parseWidget(trimmed);
@@ -174,7 +198,7 @@ const MessageContentRenderer: React.FC<MessageContentRendererProps> = ({ content
     return <WidgetRenderer payload={wholeWidget} textColor={textColor} />;
   }
 
-  const { widget, before, after } = findWidgetInText(content);
+  const { widget, before, after } = findWidgetInText(safeContent);
 
   if (widget) {
     const beforeParts = parseContent(before, textColor);
@@ -197,7 +221,7 @@ const MessageContentRenderer: React.FC<MessageContentRendererProps> = ({ content
     );
   }
 
-  const parts = parseContent(content, textColor);
+  const parts = parseContent(safeContent, textColor);
 
   if (parts.length === 0) {
     return null;
