@@ -205,6 +205,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: '#000000',
+    paddingRight: 2,
   },
   itemTitleActive: {
     color: '#007AFF',
@@ -214,6 +215,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
     marginTop: 2,
+    paddingRight: 2,
   },
   itemDateActive: {
     color: '#007AFF',

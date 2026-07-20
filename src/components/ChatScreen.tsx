@@ -88,28 +88,35 @@ export default function ChatScreen() {
     const isUser = message.role === 'user';
     const showThought = thoughtExpanded[message.id];
 
+    const rowStyle = {
+      width: '100%',
+      flexDirection: 'row' as const,
+      justifyContent: isUser ? 'flex-end' : ('flex-start' as const),
+    };
+
     return (
-      <View
-        key={message.id}
-        style={[
-          styles.messageBubble,
-          isUser ? styles.userBubble : styles.assistantBubble,
-        ]}
-      >
-        {!isUser && message.thought && (
-          <TouchableOpacity
-            onPress={() => toggleThought(message.id)}
-            style={styles.thoughtToggle}
-          >
-            <Text style={styles.thoughtToggleText}>{showThought ? 'Hide reasoning' : 'Show reasoning'}</Text>
-          </TouchableOpacity>
-        )}
-        {!isUser && message.thought && showThought && (
-          <View style={styles.thoughtBox}>
-            <Text style={styles.thoughtText}>{message.thought}</Text>
-          </View>
-        )}
-        <MessageContentRenderer content={message.content} isUser={isUser} />
+      <View key={message.id} style={rowStyle}>
+        <View
+          style={[
+            styles.messageBubble,
+            isUser ? styles.userBubble : styles.assistantBubble,
+          ]}
+        >
+          {!isUser && message.thought && (
+            <TouchableOpacity
+              onPress={() => toggleThought(message.id)}
+              style={styles.thoughtToggle}
+            >
+              <Text style={styles.thoughtToggleText}>{showThought ? 'Hide reasoning' : 'Show reasoning'}</Text>
+            </TouchableOpacity>
+          )}
+          {!isUser && message.thought && showThought && (
+            <View style={styles.thoughtBox}>
+              <Text style={styles.thoughtText}>{message.thought}</Text>
+            </View>
+          )}
+          <MessageContentRenderer content={message.content} isUser={isUser} />
+        </View>
       </View>
     );
   }, [thoughtExpanded, toggleThought]);
@@ -269,7 +276,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   userBubble: {
-    alignSelf: 'flex-end',
     backgroundColor: '#007AFF',
     borderBottomRightRadius: 4,
   },
@@ -300,6 +306,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#8E8E93',
     fontWeight: '500',
+    paddingRight: 2,
   },
   thoughtBox: {
     backgroundColor: '#F2F2F7',
@@ -314,6 +321,7 @@ const styles = StyleSheet.create({
     color: '#3C3C43',
     fontStyle: 'italic',
     lineHeight: 18,
+    paddingRight: 2,
   },
   activeToolsOverlay: {
     flexDirection: 'row',

@@ -151,21 +151,26 @@ const findWidgetInText = (text: string): { widget: WidgetPayload | null; before:
   return { widget: null, before: safeText, after: '' };
 };
 
-const parseContent = (content: string, textColor: string): React.ReactNode[] => {
+const parseContent = (content: string, textColor: string, isUser: boolean): React.ReactNode[] => {
   const safeContent = content ?? '';
-  if (!safeContent.trim()) {
-    return [];
-  }
+  if (!safeContent.trim()) return [];
+
   const parts: React.ReactNode[] = [];
   const codeBlockRegex = /```([\w\s]*)\n?([\s\S]*?)```/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
 
+  const textStyle = [styles.plainText, { color: textColor }];
+
   while ((match = codeBlockRegex.exec(content)) !== null) {
     const beforeText = content.slice(lastIndex, match.index);
     if (beforeText.trim()) {
-      parts.push(<Text key={`text-${key++}`} style={[styles.plainText, { color: textColor }]}>{beforeText}</Text>);
+      parts.push(
+        <Text key={`text-${key++}`} style={textStyle}>
+          {beforeText + ' '}
+        </Text>
+      );
     }
 
     const language = match[1].trim() || undefined;
@@ -177,7 +182,11 @@ const parseContent = (content: string, textColor: string): React.ReactNode[] => 
 
   const afterText = content.slice(lastIndex);
   if (afterText.trim()) {
-    parts.push(<Text key={`text-${key++}`} style={[styles.plainText, { color: textColor }]}>{afterText}</Text>);
+    parts.push(
+      <Text key={`text-${key++}`} style={textStyle}>
+        {afterText + ' '}
+      </Text>
+    );
   }
 
   return parts;
@@ -201,19 +210,20 @@ const MessageContentRenderer: React.FC<MessageContentRendererProps> = ({ content
   const { widget, before, after } = findWidgetInText(safeContent);
 
   if (widget) {
-    const beforeParts = parseContent(before, textColor);
-    const afterParts = after.trim() ? parseContent(after, textColor) : [];
+    const beforeParts = parseContent(before, textColor, isUser);
+    const afterParts = after.trim() ? parseContent(after, textColor, isUser) : [];
+    const alignmentStyle = { alignItems: isUser ? 'flex-end' : 'flex-start' };
 
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, alignmentStyle]}>
         {beforeParts.map((part, i) => (
-          <View key={`before-${i}`} style={styles.partContainer}>
+          <View key={`before-${i}`} style={[styles.partContainer, alignmentStyle]}>
             {part}
           </View>
         ))}
         <WidgetRenderer payload={widget} textColor={textColor} />
         {afterParts.map((part, i) => (
-          <View key={`after-${i}`} style={styles.partContainer}>
+          <View key={`after-${i}`} style={[styles.partContainer, alignmentStyle]}>
             {part}
           </View>
         ))}
@@ -221,16 +231,22 @@ const MessageContentRenderer: React.FC<MessageContentRendererProps> = ({ content
     );
   }
 
-  const parts = parseContent(safeContent, textColor);
+  const parts = parseContent(safeContent, textColor, isUser);
 
   if (parts.length === 0) {
     return null;
   }
 
+  if (isUser && parts.length === 1) {
+    return parts[0];
+  }
+
+  const alignmentStyle = { alignItems: isUser ? 'flex-end' : 'flex-start' };
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, alignmentStyle]}>
       {parts.map((part, index) => (
-        <View key={index} style={styles.partContainer}>
+        <View key={index} style={[styles.partContainer, alignmentStyle]}>
           {part}
         </View>
       ))}
@@ -248,6 +264,7 @@ const styles = StyleSheet.create({
   plainText: {
     fontSize: 16,
     lineHeight: 22,
+    paddingRight: 8,
   },
   codeContainer: {
     backgroundColor: '#1E1E1E',
