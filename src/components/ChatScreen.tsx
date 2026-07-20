@@ -16,11 +16,13 @@ import { useMcpStore } from '../store/mcpStore';
 import { systemInfoTool, systemInfoToolHandler } from '../plugins/systemInfoTool';
 import { listSandboxFilesTool, listSandboxFilesHandler, readSandboxFileTool, readSandboxFileHandler } from '../plugins/fileSystemTool';
 import MessageContentRenderer from './MessageContentRenderer';
+import SessionList from './SessionList';
 
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const [inputText, setInputText] = useState('');
   const [thoughtExpanded, setThoughtExpanded] = useState<Record<string, boolean>>({});
+  const [showSessionList, setShowSessionList] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const messages = useMcpStore((state: { messages: { id: string; role: 'user' | 'assistant'; content: string; thought?: string }[] }) => state.messages);
@@ -49,13 +51,13 @@ export default function ChatScreen() {
   useEffect(() => {
       // Válassz az alábbi URL-ek közül a tesztelési környezeted alapján:
       // Webes teszteléshez (npm run web):
-      const SERVER_URL = 'ws://localhost:8080/mcp';
-      
+      // const SERVER_URL = 'ws://localhost:8080/mcp';     
+     
       // Android Emulátorhoz (ha a gépeden fut a mock szerver):
       // const SERVER_URL = 'ws://10.0.2.2:8080/mcp';
       
       // Valódi Android telefonhoz (a fejlesztői géped helyi IP címe kell):
-      // const SERVER_URL = 'ws://192.168.1.X:8080/mcp';
+      const SERVER_URL = 'ws://192.168.1.89:8080/mcp';
 
       connect(SERVER_URL);
     }, [connect]);
@@ -127,9 +129,20 @@ export default function ChatScreen() {
   return (
     <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Octopus Chat</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity onPress={() => setShowSessionList(true)}>
+            <Text style={styles.headerTitle}>☰</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Octopus Chat</Text>
+        </View>
         <View style={[styles.statusDot, { backgroundColor: isConnected ? '#34C759' : '#FF3B30' }]} />
       </View>
+
+      {showSessionList && (
+        <Modal visible={showSessionList} animationType="slide" onRequestClose={() => setShowSessionList(false)}>
+          <SessionList onClose={() => setShowSessionList(false)} />
+        </Modal>
+      )}
 
       {renderActiveToolsOverlay()}
 

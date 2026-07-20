@@ -38,6 +38,13 @@ export interface ChatMessage {
   content: string;
   thought?: string;
   timestamp: number;
+  sessionId: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: number;
 }
 
 export const MCP_ERROR_CODES = {
