@@ -115,6 +115,15 @@ export async function updateMessageContent(
   }
 }
 
+export async function updateSessionTitle(sessionId: string, title: string): Promise<void> {
+  const sessions = await readSessions();
+  const index = sessions.findIndex(s => s.id === sessionId);
+  if (index >= 0) {
+    sessions[index] = { ...sessions[index], title };
+    await writeSessions(sessions);
+  }
+}
+
 export async function deleteSessionData(sessionId: string): Promise<void> {
   const messages = await readMessages();
   const filtered = messages.filter(m => m.sessionId !== sessionId);

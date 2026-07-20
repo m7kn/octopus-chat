@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { McpWebSocketClient, ConnectionStatus, McpToolHandler } from '../core/mcp/transport';
 import { McpTool, McpError, ChatMessage, ChatSession } from '../core/mcp/types';
 import { initializeDatabase } from '../core/db/database';
-import { loadAllMessages, saveMessage, updateMessageContent, loadAllSessions, loadMessagesBySession, createSession, deleteSessionData } from '../core/db/messageRepo';
+import { loadAllMessages, saveMessage, updateMessageContent, loadAllSessions, loadMessagesBySession, createSession, deleteSessionData, updateSessionTitle } from '../core/db/messageRepo';
 
 export interface ActiveTool {
   name: string;
@@ -30,6 +30,7 @@ export interface McpStore {
   createNewSession: () => void;
   switchSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
+  updateSessionTitle: (sessionId: string, newTitle: string) => Promise<void>;
   init: () => Promise<void>;
 }
 
@@ -147,6 +148,17 @@ export const useMcpStore = create<McpStore>((set, get) => {
         messages: [...state.messages, userMessage],
       }));
 
+      const currentSession = get().sessions.find(s => s.id === activeSessionId);
+      if (currentSession && currentSession.title === 'New Chat') {
+        const newTitle = text.length > 30 ? text.slice(0, 30) + '...' : text;
+        await updateSessionTitle(activeSessionId, newTitle).catch((err) => {
+          console.error("=> DB HIBA a session címke mentésekor:", err);
+        });
+        set((state) => ({
+          sessions: state.sessions.map(s => s.id === activeSessionId ? { ...s, title: newTitle } : s),
+        }));
+      }
+
       await saveMessage(userMessage);
       client.sendMessage(text);
     },
@@ -202,6 +214,12 @@ export const useMcpStore = create<McpStore>((set, get) => {
           sessions: state.sessions.filter(s => s.id !== sessionId),
           activeSessionId: state.activeSessionId === sessionId ? null : state.activeSessionId,
           messages: state.activeSessionId === sessionId ? [] : state.messages,
+        }));
+      },
+      updateSessionTitle: async (sessionId: string, newTitle: string) => {
+        await updateSessionTitle(sessionId, newTitle);
+        set((state) => ({
+          sessions: state.sessions.map(s => s.id === sessionId ? { ...s, title: newTitle } : s),
         }));
       },
       init: async () => {
