@@ -15,6 +15,7 @@ export interface McpWebSocketClientOptions {
   onToolStart?: (toolName: string, params: unknown) => void;
   onToolEnd?: (toolName: string, result: unknown, error?: Error) => void;
   onMessageReceived?: (text: string, isDone: boolean, thought?: string) => void;
+  onInitialized?: (serverInfo: { name: string; version: string }) => void;
   validateToolPermission?: (toolName: string, params: unknown) => Promise<boolean>;
 }
 
@@ -28,6 +29,7 @@ export class McpWebSocketClient {
   private readonly onToolStart?: (toolName: string, params: unknown) => void;
   private readonly onToolEnd?: (toolName: string, result: unknown, error?: Error) => void;
   private readonly onMessageReceived?: (text: string, isDone: boolean, thought?: string) => void;
+  private readonly onInitialized?: (serverInfo: { name: string; version: string }) => void;
   public validateToolPermission?: (toolName: string, params: unknown) => Promise<boolean>;
   private pendingRequests: Map<
     string | number,
@@ -41,13 +43,14 @@ export class McpWebSocketClient {
     this.onToolStart = options.onToolStart;
     this.onToolEnd = options.onToolEnd;
     this.onMessageReceived = options.onMessageReceived;
+    this.onInitialized = options.onInitialized;
   }
 
   getStatus(): ConnectionStatus {
     return this.status;
   }
 
-  connect(url?: string): void {
+  async connect(url?: string): Promise<void> {
     if (url) {
       this.url = url;
     }
@@ -68,6 +71,7 @@ export class McpWebSocketClient {
 
     this.ws.onopen = () => {
       this.setStatus('connected');
+      this.sendInitialize();
     };
 
     this.ws.onmessage = (event: MessageEvent) => {
@@ -82,6 +86,29 @@ export class McpWebSocketClient {
       this.setStatus('disconnected');
       this.rejectAllPending(new Error('WebSocket connection closed'));
     };
+  }
+
+  private async sendInitialize(): Promise<void> {
+    try {
+      const result = await this.sendRequest('initialize', {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: {
+          name: 'octopus-chat-client',
+          version: '1.0.0',
+        },
+      });
+
+      const serverInfo = (result as { serverInfo?: { name?: string; version?: string } })?.serverInfo;
+      if (serverInfo && this.onInitialized) {
+        this.onInitialized({
+          name: typeof serverInfo.name === 'string' ? serverInfo.name : '',
+          version: typeof serverInfo.version === 'string' ? serverInfo.version : '',
+        });
+      }
+    } catch {
+      // ignore initialize errors
+    }
   }
 
   disconnect(): void {

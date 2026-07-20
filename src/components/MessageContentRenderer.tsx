@@ -212,7 +212,7 @@ const MessageContentRenderer: React.FC<MessageContentRendererProps> = ({ content
   if (widget) {
     const beforeParts = parseContent(before, textColor, isUser);
     const afterParts = after.trim() ? parseContent(after, textColor, isUser) : [];
-    const alignmentStyle = { alignItems: isUser ? 'flex-end' : 'flex-start' };
+    const alignmentStyle = { alignItems: isUser ? 'flex-end' as const : ('flex-start' as const) };
 
     return (
       <View style={[styles.container, alignmentStyle]}>
@@ -241,7 +241,7 @@ const MessageContentRenderer: React.FC<MessageContentRendererProps> = ({ content
     return parts[0];
   }
 
-  const alignmentStyle = { alignItems: isUser ? 'flex-end' : 'flex-start' };
+  const alignmentStyle = { alignItems: isUser ? 'flex-end' as const : ('flex-start' as const) };
 
   return (
     <View style={[styles.container, alignmentStyle]}>

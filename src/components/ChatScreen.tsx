@@ -28,6 +28,7 @@ export default function ChatScreen() {
 
   const messages = useMcpStore((state: { messages: { id: string; role: 'user' | 'assistant'; content: string; thought?: string }[] }) => state.messages);
   const isConnected = useMcpStore((state: { isConnected: boolean }) => state.isConnected);
+  const connectedModelName = useMcpStore((state: { connectedModelName: string | null }) => state.connectedModelName);
   const activeTools = useMcpStore((state: { activeTools: { name: string; params: unknown; startedAt: number }[] }) => state.activeTools);
   const pendingAuthorization = useMcpStore((state: { pendingAuthorization: { toolName: string; params: unknown; resolve: (approved: boolean) => void } | null }) => state.pendingAuthorization);
   const sendUserPrompt = useMcpStore((state: { sendUserPrompt: (text: string) => void }) => state.sendUserPrompt);
@@ -89,9 +90,9 @@ export default function ChatScreen() {
     const showThought = thoughtExpanded[message.id];
 
     const rowStyle = {
-      width: '100%',
+      width: '100%' as const,
       flexDirection: 'row' as const,
-      justifyContent: isUser ? 'flex-end' : ('flex-start' as const),
+      justifyContent: isUser ? 'flex-end' as const : ('flex-start' as const),
     };
 
     return (
@@ -145,7 +146,12 @@ export default function ChatScreen() {
           <TouchableOpacity onPress={() => setShowSessionList(true)}>
             <Text style={styles.headerTitle}>☰</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Octopus Chat</Text>
+          <View>
+            <Text style={styles.headerTitle}>Octopus Chat</Text>
+            {connectedModelName ? (
+              <Text style={styles.headerSubtitle}>{connectedModelName}</Text>
+            ) : null}
+          </View>
         </View>
         <View style={[styles.statusDot, { backgroundColor: isConnected ? '#34C759' : '#FF3B30' }]} />
       </View>
@@ -244,6 +250,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#000000',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 2,
   },
   statusDot: {
     width: 10,

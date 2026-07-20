@@ -13,13 +13,14 @@ export interface ActiveTool {
 export interface McpStore {
   client: McpWebSocketClient | null;
   isConnected: boolean;
+  connectedModelName: string | null;
   activeTools: ActiveTool[];
   messages: ChatMessage[];
   sessions: ChatSession[];
   activeSessionId: string | null;
   error: McpError | null;
   pendingAuthorization: { toolName: string; params: unknown; resolve: (approved: boolean) => void } | null;
-  connect: (url: string) => void;
+  connect: (url: string) => Promise<void>;
   disconnect: () => void;
   sendUserPrompt: (text: string) => Promise<void>;
   registerLocalTool: (tool: McpTool, handler: McpToolHandler) => void;
@@ -41,6 +42,12 @@ export const useMcpStore = create<McpStore>((set, get) => {
   const client = new McpWebSocketClient('', {
     onStatusChange: (status: ConnectionStatus) => {
       set({ isConnected: status === 'connected' });
+    },
+    onInitialized: (serverInfo) => {
+      const name = typeof serverInfo.name === 'string' ? serverInfo.name : '';
+      const match = name.match(/\(([^)]+)\)/);
+      const modelName = match ? match[1] : name;
+      set({ connectedModelName: modelName || null });
     },
     onToolStart: (toolName: string, params: unknown) => {
       const activeTool: ActiveTool = {
@@ -120,13 +127,14 @@ export const useMcpStore = create<McpStore>((set, get) => {
   return {
     client,
     isConnected: false,
+    connectedModelName: null,
     activeTools: [],
     messages: [],
     sessions: [],
     activeSessionId: null,
     error: null,
     pendingAuthorization: null,
-    connect: (url: string) => {
+    connect: async (url: string) => {
       client.connect(url);
     },
     disconnect: () => {

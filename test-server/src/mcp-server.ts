@@ -63,6 +63,7 @@ interface Session {
   initialized: boolean;
   clientInfo?: { name: string; version: string };
   protocolVersion?: string;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
 const sessions = new Map<string, Session>();
@@ -71,7 +72,7 @@ function getOrCreateSession(ws: WebSocket): Session {
   const id = ws.url || `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let session = sessions.get(id);
   if (!session) {
-    session = { id, initialized: false };
+    session = { id, initialized: false, messages: [] };
     sessions.set(id, session);
   }
   return session;
@@ -104,6 +105,121 @@ function createError(id: number | string | null, code: number, message: string, 
 }
 
 // ---------------------------------------------------------------------------
+// Hermes LLM Integration
+// ---------------------------------------------------------------------------
+
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hermes3';
+
+type ThoughtState = 'idle' | 'inThought' | 'inContent';
+
+interface StreamDelta {
+  text: string;
+  thought?: string;
+  done: boolean;
+}
+
+async function* streamOllamaResponse(messages: Array<{ role: string; content: string }>): AsyncGenerator<StreamDelta, void, unknown> {
+  const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: OLLAMA_MODEL,
+      messages,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ollama API error ${response.status}: ${errorText}`);
+  }
+
+  if (!response.body) {
+    throw new Error('Ollama response body is empty');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let state: ThoughtState = 'idle';
+  let thoughtBuffer = '';
+  let contentBuffer = '';
+  let tagBuffer = '';
+
+  const emitDelta = async (): Promise<StreamDelta> => {
+    const delta: StreamDelta = { text: contentBuffer, done: false };
+    if (thoughtBuffer) {
+      delta.thought = thoughtBuffer;
+    }
+    thoughtBuffer = '';
+    contentBuffer = '';
+    return delta;
+  };
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        let token = '';
+        try {
+          const parsed = JSON.parse(line);
+          token = parsed.message?.content || '';
+        } catch {
+          // ignore parse errors
+        }
+
+        if (!token) continue;
+
+        for (const char of token) {
+          if (state === 'idle') {
+            tagBuffer += char;
+            if (tagBuffer.endsWith('<thought>')) {
+              contentBuffer += tagBuffer.slice(0, -9);
+              tagBuffer = '';
+              state = 'inThought';
+            } else if (tagBuffer.length > 9) {
+              contentBuffer += tagBuffer.slice(0, -9);
+              tagBuffer = tagBuffer.slice(-9);
+            }
+          } else if (state === 'inThought') {
+            tagBuffer += char;
+            if (tagBuffer.endsWith('</thought>')) {
+              thoughtBuffer += tagBuffer.slice(0, -10);
+              tagBuffer = '';
+              state = 'inContent';
+              yield await emitDelta();
+            } else if (tagBuffer.length > 10) {
+              thoughtBuffer += tagBuffer.slice(0, -10);
+              tagBuffer = tagBuffer.slice(-10);
+            }
+          } else if (state === 'inContent') {
+            contentBuffer += char;
+          }
+        }
+      }
+    }
+
+    if (contentBuffer || thoughtBuffer) {
+      yield await emitDelta();
+    }
+    yield { text: '', done: true };
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // MCP Handlers
 // ---------------------------------------------------------------------------
 
@@ -127,7 +243,7 @@ async function handleInitialize(
       tools: {},
     },
     serverInfo: {
-      name: 'openclaw-server',
+      name: `OpenClaw Server (${OLLAMA_MODEL})`,
       version: '1.0.0',
     },
   };
@@ -208,15 +324,51 @@ async function handleToolCall(
 async function handleChatMessage(
   ws: WebSocket,
   session: Session,
-  params: unknown,
-  requestId: number | string | null
+  params: Record<string, unknown>,
+  requestId?: number | string
 ): Promise<void> {
-  const chatParams = (params as Record<string, unknown>) || {};
-  const text = typeof chatParams.text === 'string' ? chatParams.text : '';
-  console.log(`[${session.id}] messages/new: "${text}"`);
+  const text = typeof params.text === 'string' ? params.text : '';
+  console.log(`[${session.id}] chat/message: "${text}"`);
 
-  // Stub: acknowledge receipt
-  if (requestId !== null) {
+  session.messages.push({ role: 'user', content: text });
+
+  let streamCounter = 0;
+  try {
+    for await (const delta of streamOllamaResponse(session.messages)) {
+      const streamId = `stream-${session.id}-${++streamCounter}`;
+      ws.send(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: streamId,
+          method: 'chat/message',
+          params: {
+            text: delta.text,
+            done: delta.done,
+            ...(delta.thought ? { thought: delta.thought } : {}),
+          },
+        })
+      );
+
+      if (delta.text && !delta.done) {
+        session.messages.push({ role: 'assistant', content: delta.text });
+      }
+    }
+  } catch (err) {
+    console.error(`[${session.id}] Ollama stream error:`, err);
+    ws.send(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: `stream-${session.id}-error`,
+        method: 'chat/message',
+        params: {
+          text: 'Sorry, I encountered an error while generating the response.',
+          done: true,
+        },
+      })
+    );
+  }
+
+  if (requestId !== undefined) {
     ws.send(JSON.stringify(createResponse(requestId, { acknowledged: true, text })));
   }
 }
@@ -230,6 +382,9 @@ async function routeMessage(ws: WebSocket, session: Session, msg: JsonRpcMessage
     switch (msg.method) {
       case 'notifications/initialized':
         await handleNotificationsInitialized(ws, session);
+        break;
+      case 'chat/message':
+        await handleChatMessage(ws, session, (msg.params as Record<string, unknown>) || {});
         break;
       default:
         console.log(`[${session.id}] Unhandled notification: ${msg.method}`);
